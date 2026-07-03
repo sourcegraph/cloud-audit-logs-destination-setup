@@ -6,8 +6,3 @@ output "sourcegraph_audit_role_arn" {
 output "sourcegraph_audit_bucket_name" {
   value = aws_s3_bucket.audit_logs.bucket
 }
-
-output "sourcegraph_audit_oidc_provider_arn" {
-  description = "IAM OIDC provider registered for the GKE cluster issuer."
-  value       = aws_iam_openid_connect_provider.gke_cluster.arn
-}

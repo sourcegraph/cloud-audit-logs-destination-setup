@@ -15,12 +15,7 @@ variable "resource_prefix" {
   default     = null
 }
 
-variable "gke_cluster_issuer_url" {
-  description = "GKE cluster OIDC issuer URL the collector's projected token is issued by. Embeds the GCP project, location, and cluster; AWS registers an IAM OIDC provider for it. Provided by Sourcegraph."
-  type        = string
-}
-
-variable "collector_ksa_sub" {
-  description = "Collector projected-token `sub`: system:serviceaccount:<per-instance-namespace>:audit-log-stream-collector. The namespace is the instance's K8s namespace, not the GCP project. Provided by Sourcegraph."
+variable "collector_gsa_unique_id" {
+  description = "Numeric unique ID of the Sourcegraph collector GCP service account. Matched as both accounts.google.com:aud and :sub in the role trust. Provided by Sourcegraph."
   type        = string
 }

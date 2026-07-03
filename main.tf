@@ -1,16 +1,12 @@
 # Sourcegraph audit-log streaming to S3 — customer-side IAM + bucket.
 #
-# Federation model: GKE workload-identity. The collector presents its
-# cluster-issued projected KSA token, so we federate the GKE cluster's OIDC
-# issuer and match on the token's `aud` and the collector KSA's `sub`.
-#
-# One instance of this module = one collector writing to one bucket. The OIDC
-# provider is created per-instance; this assumes each collector runs on a
-# distinct GKE cluster (distinct issuer URL). Two instances sharing an issuer
-# URL would conflict — AWS allows only one OIDC provider per issuer per account.
+# Federation model: Google service account. The collector's refresher sidecar
+# presents a GSA-signed accounts.google.com ID token, so trust keys only on the
+# Sourcegraph GSA (its numeric unique ID) — never on the GKE cluster. This is
+# the same shape LogPush uses; there is no per-cluster OIDC provider, so a DR
+# cluster-swap needs no customer change.
 
 locals {
-  gke_issuer_host_path = trimprefix(var.gke_cluster_issuer_url, "https://")
   # Default IAM names off the (unique-per-collector) bucket so two instances
   # in one account never collide. Override with resource_prefix if needed.
   resource_prefix = coalesce(var.resource_prefix, var.bucket_name)
@@ -50,20 +46,9 @@ resource "aws_s3_bucket_public_access_block" "audit_logs" {
   restrict_public_buckets = true
 }
 
-# TLS chain of the issuer host, used to populate the OIDC provider thumbprint.
-# AWS no longer verifies the thumbprint for issuers backed by well-known CAs
-# (it dropped that requirement in 2023), but the provider schema still
-# requires the field. Reading it live keeps it correct if the CA rotates.
-data "tls_certificate" "gke_issuer" {
-  url = var.gke_cluster_issuer_url
-}
-
-resource "aws_iam_openid_connect_provider" "gke_cluster" {
-  url             = var.gke_cluster_issuer_url
-  client_id_list  = [local.audit_audience]
-  thumbprint_list = [data.tls_certificate.gke_issuer.certificates[0].sha1_fingerprint]
-}
-
+# Federated principal is Google's global issuer — no per-cluster OIDC provider,
+# no thumbprint. Both aud and sub match the collector GSA's numeric unique ID
+# (Google sets aud == sub == uniqueId); oaud is the audience constant.
 resource "aws_iam_role" "sourcegraph_audit_collector" {
   name = "${local.resource_prefix}-collector"
 
@@ -71,12 +56,13 @@ resource "aws_iam_role" "sourcegraph_audit_collector" {
     Version = "2012-10-17"
     Statement = [{
       Effect    = "Allow"
-      Principal = { Federated = aws_iam_openid_connect_provider.gke_cluster.arn }
+      Principal = { Federated = "accounts.google.com" }
       Action    = "sts:AssumeRoleWithWebIdentity"
       Condition = {
         StringEquals = {
-          "${local.gke_issuer_host_path}:aud" = local.audit_audience
-          "${local.gke_issuer_host_path}:sub" = var.collector_ksa_sub
+          "accounts.google.com:aud"  = var.collector_gsa_unique_id
+          "accounts.google.com:sub"  = var.collector_gsa_unique_id
+          "accounts.google.com:oaud" = local.audit_audience
         }
       }
     }]
