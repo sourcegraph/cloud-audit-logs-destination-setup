@@ -6,13 +6,12 @@ provider "aws" {
 }
 
 module "audit_logs_destination" {
-  source = "git::https://github.com/sourcegraph/cloud-audit-logs-destination-setup.git?ref=v0.1.0"
+  source = "git::https://github.com/sourcegraph/cloud-audit-logs-destination-setup.git?ref=v1.0.0"
 
   bucket_name = "acme-audit-logs"
 
-  # Both values are provided by your Sourcegraph contact.
-  gke_cluster_issuer_url = "<provided by Sourcegraph>"
-  collector_ksa_sub      = "<provided by Sourcegraph>"
+  # Numeric unique ID of the Sourcegraph collector GSA. Provided by Sourcegraph.
+  collector_gsa_unique_id = "<provided by Sourcegraph>"
 }
 
 # Report this ARN (and the bucket name) back to your Sourcegraph contact.
