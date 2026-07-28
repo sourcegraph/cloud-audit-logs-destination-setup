@@ -1,4 +1,4 @@
-# Example: a Sourcegraph audit-log collector → an S3 bucket.
+# Example: a Sourcegraph audit-log collector → a customer-owned S3 bucket.
 # Provider (region, profile) is configured by you, the caller.
 
 provider "aws" {
@@ -6,7 +6,7 @@ provider "aws" {
 }
 
 module "audit_logs_destination" {
-  source = "git::https://github.com/sourcegraph/cloud-audit-logs-destination-setup.git?ref=v2.0.0"
+  source = "git::https://github.com/sourcegraph/cloud-audit-logs-destination-setup.git?ref=v2.1.0"
 
   bucket_name = "acme-audit-logs"
 

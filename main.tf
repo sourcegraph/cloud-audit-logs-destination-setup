@@ -16,11 +16,6 @@ locals {
 }
 
 resource "aws_s3_bucket" "audit_logs" {
-  #checkov:skip=CKV_AWS_18: dev testing bucket, access logging not required
-  #checkov:skip=CKV_AWS_144: dev testing bucket, cross-region replication not required
-  #checkov:skip=CKV_AWS_19: dev testing bucket, default SSE-S3 is sufficient
-  #checkov:skip=CKV_AWS_145: dev testing bucket, KMS CMK not required
-  #checkov:skip=CKV_AWS_21: dev testing bucket, versioning not required
   bucket = var.bucket_name
 }
 
