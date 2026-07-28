@@ -5,10 +5,12 @@
 # Sourcegraph GSA (its numeric unique ID) — never on the GKE cluster. This is
 # the same shape LogPush uses; there is no per-cluster OIDC provider, so a DR
 # cluster-swap needs no customer change.
+#
+# One module instance owns one bucket and N collector roles. The bucket and its
+# configuration are singular, so a shared bucket has exactly one Terraform
+# owner; each collector role is write-scoped to its own key prefix.
 
 locals {
-  # Default IAM names off the (unique-per-collector) bucket so two instances
-  # in one account never collide. Override with resource_prefix if needed.
   resource_prefix = coalesce(var.resource_prefix, var.bucket_name)
   audit_audience  = coalesce(var.sourcegraph_audit_audience, "sourcegraph-otel-audit-aws")
 }
@@ -50,7 +52,9 @@ resource "aws_s3_bucket_public_access_block" "audit_logs" {
 # no thumbprint. Both aud and sub match the collector GSA's numeric unique ID
 # (Google sets aud == sub == uniqueId); oaud is the audience constant.
 resource "aws_iam_role" "sourcegraph_audit_collector" {
-  name = "${local.resource_prefix}-collector"
+  for_each = var.collectors
+
+  name = "${local.resource_prefix}-${each.key}-collector"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -60,17 +64,29 @@ resource "aws_iam_role" "sourcegraph_audit_collector" {
       Action    = "sts:AssumeRoleWithWebIdentity"
       Condition = {
         StringEquals = {
-          "accounts.google.com:aud"  = var.collector_gsa_unique_id
-          "accounts.google.com:sub"  = var.collector_gsa_unique_id
+          "accounts.google.com:aud"  = each.value
+          "accounts.google.com:sub"  = each.value
           "accounts.google.com:oaud" = local.audit_audience
         }
       }
     }]
   })
+
+  lifecycle {
+    precondition {
+      # IAM caps role names at 64 chars; the -s3-access policy suffix is longer.
+      condition     = length("${local.resource_prefix}-${each.key}-s3-access") <= 64
+      error_message = "IAM name '${local.resource_prefix}-${each.key}-s3-access' exceeds 64 characters. Shorten resource_prefix or the collector key."
+    }
+  }
 }
 
+# Bucket-wide write. The collector writes under its own src-<id>/ prefix, so
+# isolation comes from the collector's object keys, not from the IAM scope.
 resource "aws_iam_policy" "sourcegraph_audit_s3_access" {
-  name = "${local.resource_prefix}-s3-access"
+  for_each = var.collectors
+
+  name = "${local.resource_prefix}-${each.key}-s3-access"
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -84,6 +100,8 @@ resource "aws_iam_policy" "sourcegraph_audit_s3_access" {
 }
 
 resource "aws_iam_role_policy_attachment" "sourcegraph_audit_attach" {
-  role       = aws_iam_role.sourcegraph_audit_collector.name
-  policy_arn = aws_iam_policy.sourcegraph_audit_s3_access.arn
+  for_each = var.collectors
+
+  role       = aws_iam_role.sourcegraph_audit_collector[each.key].name
+  policy_arn = aws_iam_policy.sourcegraph_audit_s3_access[each.key].arn
 }

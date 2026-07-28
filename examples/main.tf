@@ -1,4 +1,4 @@
-# Example: one Sourcegraph audit-log collector → one S3 bucket.
+# Example: a Sourcegraph audit-log collector → an S3 bucket.
 # Provider (region, profile) is configured by you, the caller.
 
 provider "aws" {
@@ -6,17 +6,21 @@ provider "aws" {
 }
 
 module "audit_logs_destination" {
-  source = "git::https://github.com/sourcegraph/cloud-audit-logs-destination-setup.git?ref=v1.0.0"
+  source = "git::https://github.com/sourcegraph/cloud-audit-logs-destination-setup.git?ref=v2.0.0"
 
   bucket_name = "acme-audit-logs"
 
-  # Numeric unique ID of the Sourcegraph collector GSA. Provided by Sourcegraph.
-  collector_gsa_unique_id = "<provided by Sourcegraph>"
+  # Sourcegraph instance ID => numeric unique ID of the collector's GCP service
+  # account. Both provided by Sourcegraph. Add an entry per instance to share
+  # this bucket across instances.
+  collectors = {
+    "src-a1b2c3" = "<provided by Sourcegraph>"
+  }
 }
 
-# Report this ARN (and the bucket name) back to your Sourcegraph contact.
-output "sourcegraph_audit_role_arn" {
-  value = module.audit_logs_destination.sourcegraph_audit_role_arn
+# Report these back to your Sourcegraph contact.
+output "sourcegraph_audit_role_arns" {
+  value = module.audit_logs_destination.sourcegraph_audit_role_arns
 }
 
 output "sourcegraph_audit_bucket_name" {
